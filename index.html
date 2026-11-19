@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="A simple notes app to capture, edit, and organise your thoughts.">
+    <title>Notes | Web Development Lab</title>
+    <link rel="stylesheet" href="style.css">
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const starterNotes = [
+            {
+                id: "welcome-note",
+                title: "A little space to think",
+                content: "Use this notebook for quick ideas, reminders, and plans. Your notes stay saved in this browser.",
+                updatedAt: new Date().toISOString()
+            },
+            {
+                id: "weekend-note",
+                title: "Weekend list",
+                content: "Pick up a book\nGo for a long walk\nMake something good for dinner",
+                updatedAt: new Date().toISOString()
+            }
+        ];
+
+        function loadNotes() {
+            try {
+                const savedNotes = localStorage.getItem("experiment-7-notes");
+                if (savedNotes === null) {
+                    return { notes: starterNotes, error: "" };
+                }
+
+                const parsedNotes = JSON.parse(savedNotes);
+                if (!Array.isArray(parsedNotes) || parsedNotes.some((note) => (
+                    !note
+                    || typeof note.id !== "string"
+                    || typeof note.title !== "string"
+                    || typeof note.content !== "string"
+                    || typeof note.updatedAt !== "string"
+                ))) {
+                    throw new Error("Saved notes have an invalid format.");
+                }
+
+                return { notes: parsedNotes, error: "" };
+            } catch (error) {
+                return {
+                    notes: starterNotes,
+                    error: "Saved notes could not be loaded. You can still use the app, but changes may not be saved."
+                };
+            }
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            if (Number.isNaN(date.getTime())) {
+                return "Recently edited";
+            }
+            return date.toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+                year: "numeric"
+            });
+        }
+
+        function App() {
+            const initialState = React.useMemo(loadNotes, []);
+            const [notes, setNotes] = React.useState(initialState.notes);
+            const [storageError, setStorageError] = React.useState(initialState.error);
+            const [search, setSearch] = React.useState("");
+            const [editingNote, setEditingNote] = React.useState(null);
+            const [isEditorOpen, setIsEditorOpen] = React.useState(false);
+
+            React.useEffect(() => {
+                try {
+                    localStorage.setItem("experiment-7-notes", JSON.stringify(notes));
+                    setStorageError("");
+                } catch (error) {
+                    setStorageError("Your browser could not save these changes. Check its storage settings and try again.");
+                }
+            }, [notes]);
+
+            const visibleNotes = notes
+                .filter((note) => `${note.title} ${note.content}`.toLowerCase().includes(search.toLowerCase()))
+                .sort((first, second) => new Date(second.updatedAt) - new Date(first.updatedAt));
+
+            function openNewNote() {
+                setEditingNote(null);
+                setIsEditorOpen(true);
+            }
+
+            function openEditNote(note) {
+                setEditingNote(note);
+                setIsEditorOpen(true);
+            }
+
+            function closeEditor() {
+                setIsEditorOpen(false);
+                setEditingNote(null);
+            }
+
+            function saveNote(event) {
+                event.preventDefault();
+                const formData = new FormData(event.currentTarget);
+                const title = formData.get("title").trim();
+                const content = formData.get("content").trim();
+                if (!title) {
+                    return;
+                }
+
+                const updatedAt = new Date().toISOString();
+                if (editingNote) {
+                    setNotes((currentNotes) => currentNotes.map((note) => (
+                        note.id === editingNote.id ? { ...note, title, content, updatedAt } : note
+                    )));
+                } else {
+                    setNotes((currentNotes) => [
+                        { id: window.crypto.randomUUID ? window.crypto.randomUUID() : `${Date.now()}-${Math.random()}`, title, content, updatedAt },
+                        ...currentNotes
+                    ]);
+                }
+                closeEditor();
+            }
+
+            function deleteNote(note) {
+                if (window.confirm(`Delete "${note.title}"? This can't be undone.`)) {
+                    setNotes((currentNotes) => currentNotes.filter((item) => item.id !== note.id));
+                }
+            }
+
+            return (
+                <div className="app-shell">
+                    <aside className="sidebar">
+                        <a className="brand" href="../index.html" aria-label="Web Development Lab home">
+                            <span className="brand-mark" aria-hidden="true">n.</span>
+                            <span>little notes</span>
+                        </a>
+                        <button className="new-note-button" onClick={openNewNote} type="button">
+                            <span aria-hidden="true">＋</span> New note
+                        </button>
+                        <nav className="side-nav" aria-label="Notes navigation">
+                            <span className="nav-label">YOUR SPACE</span>
+                            <a className="nav-link active" href="#notes" aria-current="page">
+                                <span aria-hidden="true">▤</span> All notes
+                                <span className="note-count">{notes.length}</span>
+                            </a>
+                        </nav>
+                        <div className="sidebar-bottom">
+                            <span className="save-indicator" aria-hidden="true"></span>
+                            Saved in this browser
+                        </div>
+                    </aside>
+
+                    <main className="main-content" id="notes">
+                        <header className="page-header">
+                            <div>
+                                <p className="eyebrow">YOUR NOTEBOOK</p>
+                                <h1>All notes <span className="heading-count">{notes.length}</span></h1>
+                                <p className="page-description">A quiet place for everything on your mind.</p>
+                            </div>
+                            <label className="search-box">
+                                <span className="search-icon" aria-hidden="true">⌕</span>
+                                <span className="visually-hidden">Search notes</span>
+                                <input
+                                    type="search"
+                                    placeholder="Search your notes..."
+                                    aria-label="Search notes"
+                                    value={search}
+                                    onChange={(event) => setSearch(event.target.value)}
+                                >
+                                </input>
+                            </label>
+                        </header>
+
+                        {storageError && <p className="storage-message" role="status">{storageError}</p>}
+
+                        <section className="notes-section" aria-label="Your notes">
+                            <div className="section-heading">
+                                <h2>{search ? "Search results" : "RECENTLY EDITED"}</h2>
+                                <span>{visibleNotes.length} {visibleNotes.length === 1 ? "note" : "notes"}</span>
+                            </div>
+
+                            {visibleNotes.length > 0 ? (
+                                <div className="notes-grid">
+                                    {visibleNotes.map((note, index) => (
+                                        <article className={`note-card note-card-${index % 4}`} key={note.id}>
+                                            <button
+                                                className="note-open"
+                                                onClick={() => openEditNote(note)}
+                                                type="button"
+                                                aria-label={`Edit ${note.title}`}
+                                            >
+                                                <h3>{note.title}</h3>
+                                                <p>{note.content || "No additional text"}</p>
+                                            </button>
+                                            <div className="note-card-footer">
+                                                <time dateTime={note.updatedAt}>{formatDate(note.updatedAt)}</time>
+                                                <button
+                                                    className="delete-button"
+                                                    onClick={() => deleteNote(note)}
+                                                    type="button"
+                                                    aria-label={`Delete ${note.title}`}
+                                                >
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        </article>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="empty-state">
+                                    <span className="empty-icon" aria-hidden="true">✳</span>
+                                    <h3>{search ? "No notes found" : "Your notebook is empty"}</h3>
+                                    <p>{search ? "Try another search, or clear the search field." : "Start with a thought, a reminder, or anything you'd like to remember."}</p>
+                                    {!search && <button className="text-button" onClick={openNewNote} type="button">Write your first note <span aria-hidden="true">→</span></button>}
+                                </div>
+                            )}
+                        </section>
+                    </main>
+
+                    {isEditorOpen && (
+                        <div className="modal-backdrop" onMouseDown={(event) => {
+                            if (event.target === event.currentTarget) closeEditor();
+                        }}>
+                            <section className="editor" role="dialog" aria-modal="true" aria-labelledby="editor-title">
+                                <div className="editor-header">
+                                    <div>
+                                        <p className="eyebrow">{editingNote ? "MAKE IT YOURS" : "A FRESH PAGE"}</p>
+                                        <h2 id="editor-title">{editingNote ? "Edit note" : "New note"}</h2>
+                                    </div>
+                                    <button className="close-button" onClick={closeEditor} type="button" aria-label="Close editor">×</button>
+                                </div>
+                                <form onSubmit={saveNote}>
+                                    <label className="field-label" htmlFor="note-title">Title</label>
+                                    <input
+                                        autoFocus
+                                        className="title-input"
+                                        defaultValue={editingNote ? editingNote.title : ""}
+                                        id="note-title"
+                                        maxLength="80"
+                                        name="title"
+                                        placeholder="Give your note a name"
+                                        required
+                                    >
+                                    </input>
+                                    <label className="field-label content-label" htmlFor="note-content">Your note</label>
+                                    <textarea
+                                        className="content-input"
+                                        defaultValue={editingNote ? editingNote.content : ""}
+                                        id="note-content"
+                                        maxLength="5000"
+                                        name="content"
+                                        placeholder="Start writing..."
+                                        rows="9"
+                                    ></textarea>
+                                    <div className="editor-actions">
+                                        <button className="cancel-button" onClick={closeEditor} type="button">Cancel</button>
+                                        <button className="save-button" type="submit">{editingNote ? "Save changes" : "Save note"}</button>
+                                    </div>
+                                </form>
+                            </section>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    </script>
+</body>
+</html>
